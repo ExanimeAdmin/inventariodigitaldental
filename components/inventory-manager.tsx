@@ -13,9 +13,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import { AlertCircle, Search, Plus, FileText, Clock, Bookmark, X, AlertTriangle, Filter } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-// Importar áreas estandarizadas
-import { areas } from "../app/inventario/page"
-
 // Tipos
 interface Producto {
   id: string
@@ -131,6 +128,9 @@ const catalogoProductos = [
     precio: 250.0,
   },
 ]
+
+// Áreas predefinidas
+const areas = ["General", "Cirugía", "Odontología", "Ortodoncia", "Radiología", "Laboratorio"]
 
 // Categorías predefinidas
 const categorias = [
@@ -874,7 +874,7 @@ export function InventoryManager({ usuarioClinicaId }: { usuarioClinicaId: strin
       )}
 
       {/* Tabla de productos */}
-      <div className="rounded-md border overflow-auto max-h-[600px]">
+      <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>

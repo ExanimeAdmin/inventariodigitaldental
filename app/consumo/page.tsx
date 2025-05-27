@@ -21,7 +21,6 @@ import {
   Legend,
 } from "recharts"
 import Link from "next/link"
-import { areas } from "../inventario/page"
 
 interface ProductoUsado {
   id: string
@@ -31,7 +30,6 @@ interface ProductoUsado {
   precioUnitario: number
   precioTotal: number
   area: string
-  esPrivado?: boolean
 }
 
 interface ConsumoArea {
@@ -55,7 +53,6 @@ export default function ConsumoBox() {
   const [periodoFiltro, setPeriodoFiltro] = useState<"dia" | "semana" | "mes" | "todo">("mes")
   const [datosGraficoBarras, setDatosGraficoBarras] = useState<any[]>([])
   const [datosGraficoPie, setDatosGraficoPie] = useState<any[]>([])
-  const [isAdmin, setIsAdmin] = useState(false)
 
   const COLORS = [
     "#0088FE",
@@ -77,10 +74,6 @@ export default function ConsumoBox() {
       return
     }
     setIsLoggedIn(true)
-
-    const user = JSON.parse(currentUser)
-    setIsAdmin(user.role === "admin")
-
     cargarDatos()
   }, [router])
 
@@ -107,6 +100,7 @@ export default function ConsumoBox() {
   }
 
   const generarDatosEjemplo = () => {
+    const areas = ["Box 1", "Box 2", "Box 3", "Box 4", "Box 5", "Cirugía Maxilofacial", "Implantología", "Endodoncia"]
     const productos = [
       "Guantes de látex",
       "Mascarillas",
@@ -134,7 +128,6 @@ export default function ConsumoBox() {
       const areaAleatoria = areas[Math.floor(Math.random() * areas.length)]
       const cantidadAleatoria = Math.floor(Math.random() * 5) + 1
       const precioUnitarioAleatorio = Math.floor(Math.random() * 50) + 10
-      const esPrivadoAleatorio = Math.random() < 0.2 // 20% de probabilidad de ser privado
 
       ejemploProductosUsados.push({
         id: `ejemplo-${i}`,
@@ -144,7 +137,6 @@ export default function ConsumoBox() {
         precioUnitario: precioUnitarioAleatorio,
         precioTotal: cantidadAleatoria * precioUnitarioAleatorio,
         area: areaAleatoria,
-        esPrivado: esPrivadoAleatorio,
       })
     }
 
@@ -183,9 +175,7 @@ export default function ConsumoBox() {
   }
 
   const calcularConsumoPorArea = () => {
-    const datosVisibles = isAdmin ? productosUsados : productosUsados.filter((item) => !item.esPrivado)
-
-    const productosFiltrados = filtrarPorPeriodo(datosVisibles)
+    const productosFiltrados = filtrarPorPeriodo(productosUsados)
     const consumo: { [area: string]: ConsumoArea } = {}
 
     productosFiltrados.forEach((producto) => {
@@ -306,9 +296,9 @@ export default function ConsumoBox() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todas">Todas las áreas</SelectItem>
-                    {areas.map((area) => (
-                      <SelectItem key={area} value={area}>
-                        {area}
+                    {consumoPorArea.map((item) => (
+                      <SelectItem key={item.area} value={item.area}>
+                        {item.area}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -384,83 +374,81 @@ export default function ConsumoBox() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto max-h-[600px]">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{areaSeleccionada === "todas" ? "Área" : "Producto"}</TableHead>
-                      <TableHead>Cantidad Total</TableHead>
-                      <TableHead>Valor Total</TableHead>
-                      <TableHead>% del Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {areaSeleccionada === "todas" ? (
-                      consumoPorArea.length > 0 ? (
-                        consumoPorArea.map((item) => {
-                          const totalValor = consumoPorArea.reduce((sum, area) => sum + area.valor, 0)
-                          const porcentaje = (item.valor / totalValor) * 100
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{areaSeleccionada === "todas" ? "Área" : "Producto"}</TableHead>
+                    <TableHead>Cantidad Total</TableHead>
+                    <TableHead>Valor Total</TableHead>
+                    <TableHead>% del Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {areaSeleccionada === "todas" ? (
+                    consumoPorArea.length > 0 ? (
+                      consumoPorArea.map((item) => {
+                        const totalValor = consumoPorArea.reduce((sum, area) => sum + area.valor, 0)
+                        const porcentaje = (item.valor / totalValor) * 100
 
-                          return (
-                            <TableRow key={item.area}>
-                              <TableCell className="font-medium">{item.area}</TableCell>
-                              <TableCell>{item.cantidad}</TableCell>
-                              <TableCell>{formatoMoneda(item.valor)}</TableCell>
-                              <TableCell>{porcentaje.toFixed(2)}%</TableCell>
-                            </TableRow>
-                          )
-                        })
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={4} className="text-center py-4">
-                            No hay datos de consumo disponibles
-                          </TableCell>
-                        </TableRow>
-                      )
+                        return (
+                          <TableRow key={item.area}>
+                            <TableCell className="font-medium">{item.area}</TableCell>
+                            <TableCell>{item.cantidad}</TableCell>
+                            <TableCell>{formatoMoneda(item.valor)}</TableCell>
+                            <TableCell>{porcentaje.toFixed(2)}%</TableCell>
+                          </TableRow>
+                        )
+                      })
                     ) : (
-                      (() => {
-                        const areaData = consumoPorArea.find((item) => item.area === areaSeleccionada)
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-4">
+                          No hay datos de consumo disponibles
+                        </TableCell>
+                      </TableRow>
+                    )
+                  ) : (
+                    (() => {
+                      const areaData = consumoPorArea.find((item) => item.area === areaSeleccionada)
 
-                        if (!areaData) {
-                          return (
-                            <TableRow>
-                              <TableCell colSpan={4} className="text-center py-4">
-                                No hay datos para esta área
-                              </TableCell>
-                            </TableRow>
-                          )
-                        }
-
-                        const productos = Object.entries(areaData.productos)
-                        const totalValor = productos.reduce((sum, [_, datos]) => sum + datos.valor, 0)
-
-                        return productos.length > 0 ? (
-                          productos
-                            .sort(([_, a], [__, b]) => b.valor - a.valor)
-                            .map(([producto, datos]) => {
-                              const porcentaje = (datos.valor / totalValor) * 100
-
-                              return (
-                                <TableRow key={producto}>
-                                  <TableCell className="font-medium">{producto}</TableCell>
-                                  <TableCell>{datos.cantidad}</TableCell>
-                                  <TableCell>{formatoMoneda(datos.valor)}</TableCell>
-                                  <TableCell>{porcentaje.toFixed(2)}%</TableCell>
-                                </TableRow>
-                              )
-                            })
-                        ) : (
+                      if (!areaData) {
+                        return (
                           <TableRow>
                             <TableCell colSpan={4} className="text-center py-4">
-                              No hay productos registrados para esta área
+                              No hay datos para esta área
                             </TableCell>
                           </TableRow>
                         )
-                      })()
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+                      }
+
+                      const productos = Object.entries(areaData.productos)
+                      const totalValor = productos.reduce((sum, [_, datos]) => sum + datos.valor, 0)
+
+                      return productos.length > 0 ? (
+                        productos
+                          .sort(([_, a], [__, b]) => b.valor - a.valor)
+                          .map(([producto, datos]) => {
+                            const porcentaje = (datos.valor / totalValor) * 100
+
+                            return (
+                              <TableRow key={producto}>
+                                <TableCell className="font-medium">{producto}</TableCell>
+                                <TableCell>{datos.cantidad}</TableCell>
+                                <TableCell>{formatoMoneda(datos.valor)}</TableCell>
+                                <TableCell>{porcentaje.toFixed(2)}%</TableCell>
+                              </TableRow>
+                            )
+                          })
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-4">
+                            No hay productos registrados para esta área
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })()
+                  )}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </>

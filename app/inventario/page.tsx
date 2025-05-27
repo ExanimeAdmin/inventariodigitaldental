@@ -70,7 +70,6 @@ interface Compra {
   proveedor: string
   area: string
   usuario: string
-  esPrivado?: boolean
 }
 
 interface Usuario {
@@ -87,11 +86,6 @@ const formatearPrecioCLP = (precio: number) => {
     currency: "CLP",
     minimumFractionDigits: 0,
   }).format(precio)
-}
-
-// Función para calcular el precio total correctamente
-const calcularPrecioTotal = (cantidad: number, precioUnitario: number) => {
-  return cantidad * precioUnitario
 }
 
 // Áreas predefinidas
@@ -530,15 +524,6 @@ export default function InventarioPage() {
     })
   }, [productoSeleccionado])
 
-  // Función para filtrar datos según el usuario
-  const filtrarDatosPorUsuario = (datos) => {
-    if (usuarioActual.rol === "administrador") {
-      return datos // El admin ve todo
-    } else {
-      return datos.filter((item) => item.usuario === usuarioActual.nombre || !item.esPrivado)
-    }
-  }
-
   // Función para registrar una nueva compra
   const registrarCompra = useCallback(() => {
     if (!compraForm.productoId || compraForm.cantidad <= 0 || !compraForm.area) {
@@ -570,7 +555,7 @@ export default function InventarioPage() {
       return
     }
 
-    const precioTotal = calcularPrecioTotal(compraForm.cantidad, compraForm.precioUnitario)
+    const precioTotal = compraForm.cantidad * compraForm.precioUnitario
 
     const nuevaCompra: Compra = {
       id: Date.now().toString(),
@@ -583,11 +568,6 @@ export default function InventarioPage() {
       proveedor: compraForm.proveedor || producto.proveedor || "No especificado",
       area: compraForm.area,
       usuario: usuarioActual.nombre,
-    }
-
-    // Añadir propiedad para marcar datos privados del admin
-    if (usuarioActual.rol === "administrador") {
-      nuevaCompra.esPrivado = true
     }
 
     // Actualizar compras

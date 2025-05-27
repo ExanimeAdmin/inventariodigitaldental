@@ -72,7 +72,6 @@ export default function Informes() {
     [],
   )
   const [datosGrafico, setDatosGrafico] = useState<{ name: string; value: number }[]>([])
-  const [gastoMes, setGastoMes] = useState(0)
 
   useEffect(() => {
     const currentUserJson = localStorage.getItem("currentUser")
@@ -102,9 +101,8 @@ export default function Informes() {
   }, [router])
 
   useEffect(() => {
-    if (inventario.length > 0 && productosUsados.length > 0 && compras.length > 0) {
+    if (inventario.length > 0 && productosUsados.length > 0) {
       generarInformes()
-      calcularGastos()
     }
   }, [inventario, productosUsados, compras, periodoFiltro, areaFiltro])
 
@@ -230,42 +228,9 @@ export default function Informes() {
         value: item.cantidad,
       })),
     )
-  }
 
-  const calcularGastos = () => {
-    // Filtrar compras por área si es necesario
-    const comprasFiltradas =
-      areaFiltro !== "todas"
-        ? compras.filter((compra) => compra.area === areaFiltro)
-        : userArea !== "Todas" && !isAdmin
-          ? compras.filter((compra) => compra.area === userArea)
-          : compras
-
-    // Calcular gasto total con precisión
-    const total = comprasFiltradas.reduce((sum, compra) => {
-      // Recalcular el precio total para asegurar precisión
-      const precioTotalCalculado = compra.cantidad * compra.precioUnitario
-      return sum + precioTotalCalculado
-    }, 0)
-
-    setGastoTotal(total)
-
-    // Calcular gasto del mes actual con la misma precisión
-    const hoy = new Date()
-    const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-    const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
-
-    const gastoMesActual = comprasFiltradas.reduce((sum, compra) => {
-      const fechaCompra = new Date(compra.fecha)
-      if (fechaCompra >= primerDiaMes && fechaCompra <= ultimoDiaMes) {
-        // Recalcular el precio total para asegurar precisión
-        const precioTotalCalculado = compra.cantidad * compra.precioUnitario
-        return sum + precioTotalCalculado
-      }
-      return sum
-    }, 0)
-
-    setGastoMes(gastoMesActual)
+    // Gasto total
+    setGastoTotal(gastoUsados + gastoVencidos + gastoAgotados)
   }
 
   const filtrarPorPeriodo = (datos: any[]) => {
@@ -520,7 +485,7 @@ export default function Informes() {
                   </Button>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto max-h-[600px]">
+                  <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -581,7 +546,7 @@ export default function Informes() {
                   </Button>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto max-h-[600px]">
+                  <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -633,7 +598,7 @@ export default function Informes() {
                   </Button>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto max-h-[600px]">
+                  <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -691,7 +656,7 @@ export default function Informes() {
                     </ResponsiveContainer>
                   </div>
 
-                  <div className="overflow-x-auto max-h-[600px]">
+                  <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
