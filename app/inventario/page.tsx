@@ -1,31 +1,43 @@
 "use client"
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+
+import { Textarea } from "@/components/ui/textarea"
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { TableCell, TableRow } from "@/components/ui/table"
-import { useInventory } from "@/hooks/use-inventory"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AddProductForm } from "@/components/add-product-form"
 import {
   Home,
+  Search,
+  Filter,
   AlertCircle,
   Clock,
   Bookmark,
   Edit,
   Trash2,
   X,
+  AlertTriangle,
+  RefreshCcw,
   FileDown,
+  ArrowUp,
+  ShoppingCart,
   Snowflake,
-  Bell,
-  Smartphone,
-  Laptop,
-  Tablet,
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "@/components/ui/use-toast"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
-import { useMediaQuery } from "@/hooks/use-media-query"
+
+// Añadir la función para verificar refrigeración en el componente de inventario
+// Importar la función desde el componente add-product-form
+import { requiereRefrigeracionProducto } from "@/components/add-product-form"
 
 // Tipos de datos
 interface Producto {
@@ -68,13 +80,6 @@ interface Usuario {
   clinicaId: string
 }
 
-interface SearchFilter {
-  id: string
-  name: string
-  criteria: any
-  isDefault?: boolean
-}
-
 // Función para formatear precio en CLP
 const formatearPrecioCLP = (precio: number) => {
   return new Intl.NumberFormat("es-CL", {
@@ -112,233 +117,135 @@ export const areas = [
 const categorias = ["Consumible", "Equipamiento", "Instrumental", "Limpieza", "Inmobiliario", "Medicamento", "Otros"]
 
 // Componente de fila de producto memoizado para mejorar rendimiento
-const ProductoRow = ({
-  producto,
-  bajoStock,
-  proximoAVencer,
-  diasParaVencer,
-  requiereRefrigeracion,
-  toggleGuardarProducto,
-  decrementarCantidad,
-  incrementarCantidad,
-  handleEditar,
-  handleEliminar,
-  isMobile,
-}) => {
-  // Versión móvil de la fila
-  if (isMobile) {
+const ProductoRow = memo(
+  ({
+    producto,
+    bajoStock,
+    proximoAVencer,
+    diasParaVencer,
+    requiereRefrigeracion,
+    toggleGuardarProducto,
+    decrementarCantidad,
+    incrementarCantidad,
+    handleEditar,
+    handleEliminar,
+  }) => {
     return (
-      <Card
-        className={cn(
-          "mb-4",
+      <TableRow
+        key={producto.id}
+        className={
           bajoStock
-            ? "bg-red-50 dark:bg-red-950/20 border-red-200"
+            ? "bg-red-50 dark:bg-red-950/20"
             : proximoAVencer
-              ? "bg-orange-50 dark:bg-orange-950/20 border-orange-200"
+              ? "bg-orange-50 dark:bg-orange-950/20"
               : producto.guardado
-                ? "bg-teal-50 dark:bg-teal-950/20 border-teal-200"
-                : "",
-        )}
+                ? "bg-teal-50 dark:bg-teal-950/20"
+                : ""
+        }
       >
-        <CardContent className="p-4">
-          <div className="flex justify-between items-start">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-medium">{producto.nombre}</h3>
-                {requiereRefrigeracion && (
-                  <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200">
-                    <Snowflake className="h-3 w-3 mr-1" />
-                    Refrigerar
-                  </Badge>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                {producto.area} - {producto.categoria}
-              </p>
-              {producto.observaciones && <p className="text-xs text-gray-500 mt-1">{producto.observaciones}</p>}
-            </div>
-            <div className="text-right">
-              <p className="font-medium">{formatearPrecioCLP(producto.precio)}</p>
-              <p className={cn("text-sm", bajoStock ? "text-red-600 dark:text-red-400 font-medium" : "")}>
-                Stock: {producto.cantidad} / Min: {producto.stockMinimo}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-3 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => decrementarCantidad(producto.id)}
-                disabled={producto.cantidad <= 0}
-              >
-                <span className="font-bold">-</span>
-              </Button>
-              <span className={bajoStock ? "text-red-600 dark:text-red-400 font-medium" : ""}>{producto.cantidad}</span>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => incrementarCantidad(producto.id)}
-                disabled={producto.stockMaximo && producto.cantidad >= producto.stockMaximo}
-              >
-                <span className="font-bold">+</span>
-              </Button>
-            </div>
-
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => toggleGuardarProducto(producto.id)}>
-                {producto.guardado ? <X className="h-3.5 w-3.5" /> : <Bookmark className="h-3.5 w-3.5" />}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => handleEditar(producto)}>
-                <Edit className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-red-500 hover:text-red-700"
-                onClick={() => handleEliminar(producto)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          </div>
-
-          {proximoAVencer && (
-            <div className="mt-2 text-xs text-orange-600 dark:text-orange-400">
-              Vence en {diasParaVencer} días (
-              {producto.fechaCaducidad ? new Date(producto.fechaCaducidad).toLocaleDateString() : "No especificada"})
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  // Versión de escritorio (tabla)
-  return (
-    <TableRow
-      key={producto.id}
-      className={
-        bajoStock
-          ? "bg-red-50 dark:bg-red-950/20"
-          : proximoAVencer
-            ? "bg-orange-50 dark:bg-orange-950/20"
-            : producto.guardado
-              ? "bg-teal-50 dark:bg-teal-950/20"
-              : ""
-      }
-    >
-      <TableCell className="font-medium">
-        <div className="flex items-center gap-2">
-          {producto.nombre}
-          {requiereRefrigeracion && (
-            <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200">
-              <Snowflake className="h-3 w-3 mr-1" />
-              Refrigerar
-            </Badge>
-          )}
-        </div>
-        {producto.observaciones && <div className="text-xs text-gray-500 mt-1 max-w-xs">{producto.observaciones}</div>}
-      </TableCell>
-      <TableCell>{producto.area}</TableCell>
-      <TableCell>{producto.categoria}</TableCell>
-      <TableCell>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => decrementarCantidad(producto.id)}
-            disabled={producto.cantidad <= 0}
-          >
-            <span className="font-bold">-</span>
-          </Button>
-          <span className={bajoStock ? "text-red-600 dark:text-red-400 font-medium" : ""}>{producto.cantidad}</span>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => incrementarCantidad(producto.id)}
-            disabled={producto.stockMaximo && producto.cantidad >= producto.stockMaximo}
-          >
-            <span className="font-bold">+</span>
-          </Button>
-        </div>
-      </TableCell>
-      <TableCell>{producto.stockMinimo}</TableCell>
-      <TableCell>{producto.stockMaximo || "No definido"}</TableCell>
-      <TableCell className={proximoAVencer ? "text-orange-600 dark:text-orange-400 font-medium" : ""}>
-        {producto.fechaCaducidad ? new Date(producto.fechaCaducidad).toLocaleDateString() : "No especificada"}
-        {proximoAVencer && <span className="ml-2 text-xs">({diasParaVencer} días)</span>}
-      </TableCell>
-      <TableCell>
-        {producto.fechaRecepcion ? new Date(producto.fechaRecepcion).toLocaleDateString() : "No especificada"}
-      </TableCell>
-      <TableCell>{producto.proveedor || "No especificado"}</TableCell>
-      <TableCell>{formatearPrecioCLP(producto.precio)}</TableCell>
-      <TableCell>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => toggleGuardarProducto(producto.id)}
-            className="flex items-center gap-1"
-          >
-            {producto.guardado ? (
-              <>
-                <X className="h-3.5 w-3.5" />
-                Quitar
-              </>
-            ) : (
-              <>
-                <Bookmark className="h-3.5 w-3.5" />
-                Guardar
-              </>
+        <TableCell className="font-medium">
+          <div className="flex items-center gap-2">
+            {producto.nombre}
+            {requiereRefrigeracion && (
+              <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200">
+                <Snowflake className="h-3 w-3 mr-1" />
+                Refrigerar
+              </Badge>
             )}
-          </Button>
+          </div>
+          {producto.observaciones && (
+            <div className="text-xs text-gray-500 mt-1 max-w-xs">{producto.observaciones}</div>
+          )}
+        </TableCell>
+        <TableCell>{producto.area}</TableCell>
+        <TableCell>{producto.categoria}</TableCell>
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => decrementarCantidad(producto.id)}
+              disabled={producto.cantidad <= 0}
+            >
+              <span className="font-bold">-</span>
+            </Button>
+            <span className={bajoStock ? "text-red-600 dark:text-red-400 font-medium" : ""}>{producto.cantidad}</span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => incrementarCantidad(producto.id)}
+              disabled={producto.stockMaximo && producto.cantidad >= producto.stockMaximo}
+            >
+              <span className="font-bold">+</span>
+            </Button>
+          </div>
+        </TableCell>
+        <TableCell>{producto.stockMinimo}</TableCell>
+        <TableCell>{producto.stockMaximo || "No definido"}</TableCell>
+        <TableCell className={proximoAVencer ? "text-orange-600 dark:text-orange-400 font-medium" : ""}>
+          {producto.fechaCaducidad ? new Date(producto.fechaCaducidad).toLocaleDateString() : "No especificada"}
+          {proximoAVencer && <span className="ml-2 text-xs">({diasParaVencer} días)</span>}
+        </TableCell>
+        <TableCell>
+          {producto.fechaRecepcion ? new Date(producto.fechaRecepcion).toLocaleDateString() : "No especificada"}
+        </TableCell>
+        <TableCell>{producto.proveedor || "No especificado"}</TableCell>
+        <TableCell>{formatearPrecioCLP(producto.precio)}</TableCell>
+        <TableCell>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => toggleGuardarProducto(producto.id)}
+              className="flex items-center gap-1"
+            >
+              {producto.guardado ? (
+                <>
+                  <X className="h-3.5 w-3.5" />
+                  Quitar
+                </>
+              ) : (
+                <>
+                  <Bookmark className="h-3.5 w-3.5" />
+                  Guardar
+                </>
+              )}
+            </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            className="flex items-center gap-1"
-            onClick={() => handleEditar(producto)}
-          >
-            <Edit className="h-3.5 w-3.5" />
-            Editar
-          </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex items-center gap-1"
+              onClick={() => handleEditar(producto)}
+            >
+              <Edit className="h-3.5 w-3.5" />
+              Editar
+            </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            className="flex items-center gap-1 text-red-500 hover:text-red-700"
-            onClick={() => handleEliminar(producto)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Eliminar
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
-  )
-}
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex items-center gap-1 text-red-500 hover:text-red-700"
+              onClick={() => handleEliminar(producto)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Eliminar
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+    )
+  },
+)
 
-// Utilidad para combinar clases condicionales
-const cn = (...classes) => {
-  return classes.filter(Boolean).join(" ")
-}
+ProductoRow.displayName = "ProductoRow"
 
 export default function InventarioPage() {
   // Referencias para desplazamiento
   const topRef = useRef(null)
   const tablaRef = useRef(null)
-
-  // Detección de dispositivo
-  const isMobile = useMediaQuery("(max-width: 768px)")
-  const isTablet = useMediaQuery("(min-width: 769px) and (max-width: 1024px)")
-  const isDesktop = useMediaQuery("(min-width: 1025px)")
 
   // Usuario actual (simulado)
   const usuarioActual: Usuario = {
@@ -348,20 +255,8 @@ export default function InventarioPage() {
     clinicaId: "1",
   }
 
-  // Usar React Query para gestionar el inventario
-  const {
-    productos,
-    isLoading,
-    addProducto,
-    updateProducto,
-    deleteProducto,
-    updateBatch,
-    isAddingProducto,
-    isUpdatingProducto,
-    isDeletingProducto,
-  } = useInventory(usuarioActual.clinicaId)
-
   // Estados
+  const [productos, setProductos] = useState<Producto[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
   const [productoSeleccionado, setProductoSeleccionado] = useState<Producto | null>(null)
   const [productoEditando, setProductoEditando] = useState<Producto | null>(null)
@@ -388,66 +283,27 @@ export default function InventarioPage() {
     area: "",
     fecha: new Date().toISOString().split("T")[0],
   })
-  const [mostrarBusquedaAvanzada, setMostrarBusquedaAvanzada] = useState(false)
-  const [mostrarExportacion, setMostrarExportacion] = useState(false)
-  const [mostrarNotificaciones, setMostrarNotificaciones] = useState(false)
-  const [savedFilters, setSavedFilters] = useState<SearchFilter[]>([])
-  const [notificaciones, setNotificaciones] = useState<any[]>([])
-  const [tabActiva, setTabActiva] = useState("productos")
+  const [cargando, setCargando] = useState(true)
 
   // Cargar datos del localStorage al iniciar
   useEffect(() => {
     const cargarDatos = async () => {
+      setCargando(true)
       try {
+        const storedProductos = localStorage.getItem("inventario")
         const storedCompras = localStorage.getItem("compras")
-        const storedFilters = localStorage.getItem("savedFilters")
-        const storedNotificaciones = localStorage.getItem("notificaciones")
+
+        if (storedProductos) {
+          setProductos(JSON.parse(storedProductos))
+        }
 
         if (storedCompras) {
           setCompras(JSON.parse(storedCompras))
         }
-
-        if (storedFilters) {
-          setSavedFilters(JSON.parse(storedFilters))
-        }
-
-        if (storedNotificaciones) {
-          setNotificaciones(JSON.parse(storedNotificaciones))
-        } else {
-          // Crear algunas notificaciones de ejemplo
-          const notificacionesEjemplo = [
-            {
-              id: "1",
-              title: "Stock bajo de Guantes de látex",
-              message: "El producto ha alcanzado su nivel mínimo de stock. Considere realizar un pedido pronto.",
-              type: "warning",
-              timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 horas atrás
-              read: false,
-            },
-            {
-              id: "2",
-              title: "Productos próximos a vencer",
-              message:
-                "Hay 3 productos que vencerán en los próximos 30 días. Revise el inventario para tomar acciones.",
-              type: "info",
-              timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 día atrás
-              read: true,
-            },
-            {
-              id: "3",
-              title: "Nueva actualización del sistema",
-              message: "Se ha lanzado una nueva actualización del sistema con mejoras en la gestión de inventario.",
-              type: "success",
-              timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 días atrás
-              read: true,
-            },
-          ]
-
-          setNotificaciones(notificacionesEjemplo)
-          localStorage.setItem("notificaciones", JSON.stringify(notificacionesEjemplo))
-        }
       } catch (e) {
         console.error("Error al cargar datos del localStorage:", e)
+      } finally {
+        setCargando(false)
       }
     }
 
@@ -464,16 +320,16 @@ export default function InventarioPage() {
 
   // Guardar datos en localStorage cuando cambian
   useEffect(() => {
-    localStorage.setItem("compras", JSON.stringify(compras))
-  }, [compras])
+    if (!cargando) {
+      localStorage.setItem("inventario", JSON.stringify(productos))
+    }
+  }, [productos, cargando])
 
   useEffect(() => {
-    localStorage.setItem("savedFilters", JSON.stringify(savedFilters))
-  }, [savedFilters])
-
-  useEffect(() => {
-    localStorage.setItem("notificaciones", JSON.stringify(notificaciones))
-  }, [notificaciones])
+    if (!cargando) {
+      localStorage.setItem("compras", JSON.stringify(compras))
+    }
+  }, [compras, cargando])
 
   // Filtrado de productos optimizado con useMemo
   const productosFiltrados = useMemo(() => {
@@ -549,8 +405,8 @@ export default function InventarioPage() {
           clinicaId: nuevoProducto.clinicaId || usuarioActual.clinicaId,
         }
 
-        // Añadir el producto usando React Query
-        addProducto(productoCompleto)
+        // Añadir el producto a la lista
+        setProductos((prevProductos) => [...prevProductos, productoCompleto])
 
         // Registrar la acción para poder deshacerla
         setUltimaAccion({
@@ -563,18 +419,6 @@ export default function InventarioPage() {
           title: "Producto añadido",
           description: `${productoCompleto.nombre} ha sido añadido al inventario.`,
         })
-
-        // Crear notificación en el centro de notificaciones
-        const nuevaNotificacion = {
-          id: Date.now().toString(),
-          title: "Producto añadido",
-          message: `Se ha añadido ${productoCompleto.nombre} al inventario.`,
-          type: "success",
-          timestamp: new Date(),
-          read: false,
-        }
-
-        setNotificaciones([nuevaNotificacion, ...notificaciones])
 
         // Desplazarse a la tabla
         setTimeout(() => {
@@ -591,47 +435,29 @@ export default function InventarioPage() {
         })
       }
     },
-    [usuarioActual.clinicaId, addProducto, notificaciones],
+    [usuarioActual.clinicaId],
   )
 
   // Función para guardar/desguardar un producto
   const toggleGuardarProducto = useCallback(
     (id: string) => {
-      const producto = productos.find((p) => p.id === id)
-      if (!producto) return
+      const productoOriginal = productos.find((p) => p.id === id) || null
 
-      const productoActualizado = { ...producto, guardado: !producto.guardado }
-
-      // Actualizar usando React Query
-      updateProducto(productoActualizado)
+      setProductos((prevProductos) => prevProductos.map((p) => (p.id === id ? { ...p, guardado: !p.guardado } : p)))
 
       setUltimaAccion({
         tipo: "guardar",
-        producto,
+        producto: productoOriginal,
       })
-
-      // Crear notificación
-      if (productoActualizado.guardado) {
-        const nuevaNotificacion = {
-          id: Date.now().toString(),
-          title: "Producto guardado",
-          message: `${producto.nombre} ha sido marcado para seguimiento.`,
-          type: "info",
-          timestamp: new Date(),
-          read: false,
-        }
-
-        setNotificaciones([nuevaNotificacion, ...notificaciones])
-      }
     },
-    [productos, updateProducto, notificaciones],
+    [productos],
   )
 
   // Función para incrementar la cantidad de un producto
-  const incrementarCantidad = useCallback(
-    (id: string) => {
-      const producto = productos.find((p) => p.id === id)
-      if (!producto) return
+  const incrementarCantidad = useCallback((id: string) => {
+    setProductos((prevProductos) => {
+      const producto = prevProductos.find((p) => p.id === id)
+      if (!producto) return prevProductos
 
       // Verificar si la cantidad ya alcanzó el stock máximo
       if (producto.stockMaximo && producto.cantidad >= producto.stockMaximo) {
@@ -640,61 +466,40 @@ export default function InventarioPage() {
           description: `No se puede incrementar más. El stock máximo es ${producto.stockMaximo}.`,
           variant: "destructive",
         })
-        return
+        return prevProductos
       }
 
-      const productoActualizado = { ...producto, cantidad: producto.cantidad + 1 }
-
-      // Actualizar usando React Query
-      updateProducto(productoActualizado)
-
+      const productoOriginal = { ...producto }
       setUltimaAccion({
         tipo: "incrementar",
-        producto,
+        producto: productoOriginal,
       })
-    },
-    [productos, updateProducto],
-  )
+
+      return prevProductos.map((p) => (p.id === id ? { ...p, cantidad: p.cantidad + 1 } : p))
+    })
+  }, [])
 
   // Función para decrementar la cantidad de un producto
-  const decrementarCantidad = useCallback(
-    (id: string) => {
-      const producto = productos.find((p) => p.id === id)
-      if (!producto || producto.cantidad <= 0) return
+  const decrementarCantidad = useCallback((id: string) => {
+    setProductos((prevProductos) => {
+      const producto = prevProductos.find((p) => p.id === id)
+      if (!producto || producto.cantidad <= 0) return prevProductos
 
-      const productoActualizado = { ...producto, cantidad: producto.cantidad - 1 }
-
-      // Actualizar usando React Query
-      updateProducto(productoActualizado)
-
+      const productoOriginal = { ...producto }
       setUltimaAccion({
         tipo: "decrementar",
-        producto,
+        producto: productoOriginal,
       })
 
-      // Si llega a stock mínimo, crear notificación
-      if (productoActualizado.cantidad <= productoActualizado.stockMinimo) {
-        const nuevaNotificacion = {
-          id: Date.now().toString(),
-          title: "Stock bajo",
-          message: `${producto.nombre} ha alcanzado su nivel mínimo de stock.`,
-          type: "warning",
-          timestamp: new Date(),
-          read: false,
-        }
-
-        setNotificaciones([nuevaNotificacion, ...notificaciones])
-      }
-    },
-    [productos, updateProducto, notificaciones],
-  )
+      return prevProductos.map((p) => (p.id === id ? { ...p, cantidad: p.cantidad - 1 } : p))
+    })
+  }, [])
 
   // Función para actualizar un producto
   const actualizarProducto = useCallback(() => {
     if (!productoEditando) return
 
-    // Actualizar usando React Query
-    updateProducto(productoEditando)
+    setProductos((prevProductos) => prevProductos.map((p) => (p.id === productoEditando.id ? productoEditando : p)))
 
     setMostrarDialogoEditar(false)
     setUltimaAccion({
@@ -706,15 +511,13 @@ export default function InventarioPage() {
       title: "Producto actualizado",
       description: `${productoEditando.nombre} ha sido actualizado correctamente.`,
     })
-  }, [productoEditando, productoSeleccionado, updateProducto])
+  }, [productoEditando, productoSeleccionado])
 
   // Función para eliminar un producto
   const eliminarProducto = useCallback(() => {
     if (!productoSeleccionado) return
 
-    // Eliminar usando React Query
-    deleteProducto(productoSeleccionado.id)
-
+    setProductos((prevProductos) => prevProductos.filter((p) => p.id !== productoSeleccionado.id))
     setMostrarDialogoEliminar(false)
     setUltimaAccion({
       tipo: "eliminar",
@@ -725,7 +528,7 @@ export default function InventarioPage() {
       title: "Producto eliminado",
       description: `${productoSeleccionado.nombre} ha sido eliminado del inventario.`,
     })
-  }, [productoSeleccionado, deleteProducto])
+  }, [productoSeleccionado])
 
   // Función para filtrar datos según el usuario
   const filtrarDatosPorUsuario = (datos) => {
@@ -790,31 +593,24 @@ export default function InventarioPage() {
     // Actualizar compras
     setCompras((prevCompras) => [...prevCompras, nuevaCompra])
 
-    // Actualizar inventario usando React Query
-    const productoActualizado = {
-      ...producto,
-      cantidad: producto.cantidad + compraForm.cantidad,
-      proveedor: compraForm.proveedor || producto.proveedor,
-    }
-
-    updateProducto(productoActualizado)
+    // Actualizar inventario
+    setProductos((prevProductos) =>
+      prevProductos.map((p) => {
+        if (p.id === compraForm.productoId) {
+          return {
+            ...p,
+            cantidad: p.cantidad + compraForm.cantidad,
+            proveedor: compraForm.proveedor || p.proveedor,
+          }
+        }
+        return p
+      }),
+    )
 
     toast({
       title: "Compra registrada",
       description: `Se ha registrado la compra de ${compraForm.cantidad} unidades de ${producto.nombre}`,
     })
-
-    // Crear notificación
-    const nuevaNotificacion = {
-      id: Date.now().toString(),
-      title: "Compra registrada",
-      message: `Se ha registrado la compra de ${compraForm.cantidad} unidades de ${producto.nombre}.`,
-      type: "success",
-      timestamp: new Date(),
-      read: false,
-    }
-
-    setNotificaciones([nuevaNotificacion, ...notificaciones])
 
     // Resetear formulario
     setCompraForm({
@@ -827,7 +623,7 @@ export default function InventarioPage() {
     })
 
     setMostrarDialogoCompra(false)
-  }, [compraForm, productos, usuarioActual.nombre, updateProducto, notificaciones])
+  }, [compraForm, productos, usuarioActual.nombre])
 
   // Función para deshacer la última acción
   const deshacerUltimaAccion = useCallback(() => {
@@ -835,21 +631,37 @@ export default function InventarioPage() {
 
     switch (ultimaAccion.tipo) {
       case "agregar":
-        if (ultimaAccion.producto) {
-          deleteProducto(ultimaAccion.producto.id)
-        }
+        setProductos((prevProductos) => prevProductos.filter((p) => p.id !== ultimaAccion.producto?.id))
         break
       case "editar":
-      case "guardar":
-      case "incrementar":
-      case "decrementar":
         if (ultimaAccion.producto) {
-          updateProducto(ultimaAccion.producto)
+          setProductos((prevProductos) =>
+            prevProductos.map((p) => (p.id === ultimaAccion.producto?.id ? ultimaAccion.producto : p)),
+          )
         }
         break
       case "eliminar":
         if (ultimaAccion.producto) {
-          addProducto(ultimaAccion.producto)
+          setProductos((prevProductos) => [...prevProductos, ultimaAccion.producto])
+        }
+        break
+      case "incrementar":
+      case "decrementar":
+        if (ultimaAccion.producto) {
+          setProductos((prevProductos) =>
+            prevProductos.map((p) =>
+              p.id === ultimaAccion.producto?.id ? { ...p, cantidad: ultimaAccion.producto.cantidad } : p,
+            ),
+          )
+        }
+        break
+      case "guardar":
+        if (ultimaAccion.producto) {
+          setProductos((prevProductos) =>
+            prevProductos.map((p) =>
+              p.id === ultimaAccion.producto?.id ? { ...p, guardado: ultimaAccion.producto.guardado } : p,
+            ),
+          )
         }
         break
     }
@@ -860,7 +672,7 @@ export default function InventarioPage() {
     })
 
     setUltimaAccion({ tipo: "", producto: null })
-  }, [ultimaAccion, addProducto, updateProducto, deleteProducto])
+  }, [ultimaAccion])
 
   // Función para limpiar filtros
   const limpiarFiltros = useCallback(() => {
@@ -1012,112 +824,7 @@ export default function InventarioPage() {
     setMostrarDialogoEliminar(true)
   }, [])
 
-  // Función para manejar la búsqueda avanzada
-  const handleAdvancedSearch = useCallback(
-    (criteria) => {
-      // Implementar la lógica de búsqueda avanzada
-      console.log("Criterios de búsqueda avanzada:", criteria)
-
-      // Actualizar filtros básicos basados en los criterios avanzados
-      setBusqueda(criteria.keyword || "")
-      setFiltroArea(criteria.areas.length === 1 ? criteria.areas[0] : "")
-      setFiltroCategoria(criteria.categories.length === 1 ? criteria.categories[0] : "")
-      setFiltroStockMinimo(criteria.stockStatus.lowStock)
-      setFiltroProximoVencer(criteria.stockStatus.nearExpiry)
-      setFiltroGuardados(criteria.saved)
-
-      // Cerrar el panel de búsqueda avanzada en móvil
-      if (isMobile) {
-        setMostrarBusquedaAvanzada(false)
-      }
-    },
-    [isMobile],
-  )
-
-  // Función para guardar filtros de búsqueda
-  const handleSaveFilter = useCallback((filter) => {
-    // Si es un filtro predeterminado, desmarcar otros predeterminados
-    if (filter.isDefault) {
-      setSavedFilters((prev) => prev.map((f) => ({ ...f, isDefault: false })).concat([filter]))
-    } else {
-      setSavedFilters((prev) => [...prev, filter])
-    }
-
-    toast({
-      title: "Filtro guardado",
-      description: `El filtro "${filter.name}" ha sido guardado correctamente.`,
-    })
-  }, [])
-
-  // Función para manejar cambios en la configuración de notificaciones
-  const handleNotificationSettingsChange = useCallback((settings) => {
-    console.log("Nueva configuración de notificaciones:", settings)
-
-    // Aquí se implementaría la lógica para guardar la configuración
-    localStorage.setItem("notificationSettings", JSON.stringify(settings))
-
-    toast({
-      title: "Configuración guardada",
-      description: "La configuración de notificaciones ha sido actualizada.",
-    })
-  }, [])
-
-  // Función para enviar una notificación de prueba
-  const handleSendTestNotification = useCallback(() => {
-    const testNotification = {
-      id: Date.now().toString(),
-      title: "Notificación de prueba",
-      message: "Esta es una notificación de prueba para verificar la configuración.",
-      type: "info",
-      timestamp: new Date(),
-      read: false,
-    }
-
-    setNotificaciones([testNotification, ...notificaciones])
-
-    return true
-  }, [notificaciones])
-
-  // Obtener lista de proveedores únicos
-  const proveedoresUnicos = useMemo(() => {
-    const proveedores = new Set<string>()
-    productos.forEach((producto) => {
-      if (producto.proveedor) {
-        proveedores.add(producto.proveedor)
-      }
-    })
-    return Array.from(proveedores)
-  }, [productos])
-
-  // Preparar datos para exportación
-  const datosExportacion = useMemo(() => {
-    return productosFiltrados.map((producto) => ({
-      ...producto,
-      fechaCaducidad: producto.fechaCaducidad
-        ? new Date(producto.fechaCaducidad).toLocaleDateString()
-        : "No especificada",
-      fechaRecepcion: producto.fechaRecepcion
-        ? new Date(producto.fechaRecepcion).toLocaleDateString()
-        : "No especificada",
-      precio: formatearPrecioCLP(producto.precio),
-    }))
-  }, [productosFiltrados])
-
-  // Columnas para exportación
-  const columnasExportacion = [
-    { key: "nombre", header: "Nombre" },
-    { key: "area", header: "Área" },
-    { key: "categoria", header: "Categoría" },
-    { key: "cantidad", header: "Cantidad" },
-    { key: "stockMinimo", header: "Stock Mínimo" },
-    { key: "stockMaximo", header: "Stock Máximo" },
-    { key: "fechaCaducidad", header: "Fecha Caducidad" },
-    { key: "fechaRecepcion", header: "Fecha Recepción" },
-    { key: "proveedor", header: "Proveedor" },
-    { key: "precio", header: "Precio" },
-  ]
-
-  if (isLoading) {
+  if (cargando) {
     return (
       <div className="container mx-auto py-6 flex justify-center items-center h-screen">
         <div className="text-center">
@@ -1139,41 +846,17 @@ export default function InventarioPage() {
           <Link href="/">
             <Button variant="outline" className="gap-2">
               <Home className="h-4 w-4" />
-              {isMobile ? "" : "Inicio"}
+              Volver al inicio
             </Button>
           </Link>
-
-          {!isMobile && (
-            <Button variant="outline" className="gap-2" onClick={exportarInventarioPDF}>
-              <FileDown className="h-4 w-4" />
-              Exportar a PDF
-            </Button>
-          )}
-
-          <Button
-            variant="outline"
-            className="relative"
-            onClick={() => setMostrarNotificaciones(!mostrarNotificaciones)}
-          >
-            <Bell className="h-4 w-4" />
-            {notificaciones.filter((n) => !n.read).length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 text-xs flex items-center justify-center">
-                {notificaciones.filter((n) => !n.read).length}
-              </span>
-            )}
+          <Button variant="outline" className="gap-2" onClick={exportarInventarioPDF}>
+            <FileDown className="h-4 w-4" />
+            Exportar a PDF
           </Button>
         </div>
       </div>
 
-      {/* Indicador de dispositivo (solo para desarrollo) */}
-      <div className="fixed bottom-2 left-2 z-50 bg-black/70 text-white px-2 py-1 rounded text-xs">
-        {isMobile && <Smartphone className="h-3 w-3 inline mr-1" />}
-        {isTablet && <Tablet className="h-3 w-3 inline mr-1" />}
-        {isDesktop && <Laptop className="h-3 w-3 inline mr-1" />}
-        {isMobile ? "Móvil" : isTablet ? "Tablet" : "Escritorio"}
-      </div>
-
-      <Tabs value={tabActiva} onValueChange={setTabActiva}>
+      <Tabs defaultValue="productos">
         <TabsList>
           <TabsTrigger value="productos">Productos</TabsTrigger>
           <TabsTrigger value="pedidos">Pedidos</TabsTrigger>
@@ -1217,12 +900,604 @@ export default function InventarioPage() {
                     {contadores.guardados}
                   </Badge>
                 </div>
-                <p className="text-sm text-gray-500 mt-2">Productos marcados como guardados para seguimiento</p>
+                <p className="text-sm text-gray-500 mt-2">Productos marcados para seguimiento especial</p>
               </CardContent>
             </Card>
           </div>
+
+          {/* Barra de búsqueda y filtros */}
+          <div className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar productos..."
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                className="flex items-center gap-2"
+                onClick={() => setMostrarFiltrosAvanzados(!mostrarFiltrosAvanzados)}
+              >
+                <Filter className="h-4 w-4" />
+                Filtros
+                {(filtroArea || filtroCategoria || filtroStockMinimo || filtroProximoVencer || filtroGuardados) && (
+                  <Badge variant="secondary" className="ml-1">
+                    {[
+                      filtroArea ? 1 : 0,
+                      filtroCategoria ? 1 : 0,
+                      filtroStockMinimo ? 1 : 0,
+                      filtroProximoVencer ? 1 : 0,
+                      filtroGuardados ? 1 : 0,
+                    ].reduce((a, b) => a + b, 0)}
+                  </Badge>
+                )}
+              </Button>
+
+              {/* Botón para agregar producto */}
+              <AddProductForm clinicaId={usuarioActual.clinicaId} onProductAdded={handleProductoAgregado} />
+
+              {/* Botón para registrar compra */}
+              <Button className="gap-2" variant="outline" onClick={() => setMostrarDialogoCompra(true)}>
+                <ShoppingCart className="h-4 w-4" />
+                Registrar Compra
+              </Button>
+
+              {/* Botón para deshacer */}
+              {ultimaAccion.tipo && (
+                <Button variant="outline" className="flex items-center gap-2" onClick={deshacerUltimaAccion}>
+                  <RefreshCcw className="h-4 w-4" />
+                  Deshacer
+                </Button>
+              )}
+            </div>
+
+            {/* Filtros avanzados */}
+            {mostrarFiltrosAvanzados && (
+              <div className="p-4 border rounded-md bg-gray-50 dark:bg-gray-900 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="filtroArea">Área</Label>
+                    <Select value={filtroArea} onValueChange={setFiltroArea}>
+                      <SelectTrigger id="filtroArea">
+                        <SelectValue placeholder="Todas las áreas" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        <SelectItem value="all">Todas las áreas</SelectItem>
+                        {areas.map((area) => (
+                          <SelectItem key={area} value={area}>
+                            {area}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="filtroCategoria">Categoría</Label>
+                    <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
+                      <SelectTrigger id="filtroCategoria">
+                        <SelectValue placeholder="Todas las categorías" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        <SelectItem value="all">Todas las categorías</SelectItem>
+                        {categorias.map((categoria) => (
+                          <SelectItem key={categoria} value={categoria}>
+                            {categoria}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex flex-col space-y-2">
+                    <Label>Alertas</Label>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant={filtroStockMinimo ? "default" : "outline"}
+                        onClick={() => setFiltroStockMinimo(!filtroStockMinimo)}
+                        className="flex items-center gap-1"
+                      >
+                        <AlertCircle className="h-4 w-4" />
+                        Stock Mínimo
+                        {contadores.stockMinimo > 0 && (
+                          <Badge variant="destructive" className="ml-1 bg-red-600">
+                            {contadores.stockMinimo}
+                          </Badge>
+                        )}
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant={filtroProximoVencer ? "default" : "outline"}
+                        onClick={() => setFiltroProximoVencer(!filtroProximoVencer)}
+                        className="flex items-center gap-1"
+                      >
+                        <Clock className="h-4 w-4" />
+                        Próximos a vencer
+                        {contadores.proximosVencer > 0 && (
+                          <Badge className="ml-1 bg-orange-500">{contadores.proximosVencer}</Badge>
+                        )}
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant={filtroGuardados ? "default" : "outline"}
+                        onClick={() => setFiltroGuardados(!filtroGuardados)}
+                        className="flex items-center gap-1"
+                      >
+                        <Bookmark className="h-4 w-4" />
+                        Guardados
+                        {contadores.guardados > 0 && (
+                          <Badge variant="secondary" className="ml-1 bg-teal-100 text-teal-800">
+                            {contadores.guardados}
+                          </Badge>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button variant="ghost" onClick={limpiarFiltros} className="flex items-center">
+                    <X className="h-4 w-4 mr-1" />
+                    Limpiar filtros
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Alertas */}
+          {contadores.stockMinimo > 0 && !filtroStockMinimo && (
+            <Alert variant="destructive" className="bg-red-50 dark:bg-red-950/20 border-red-200">
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              <AlertDescription>
+                Hay {contadores.stockMinimo} productos por debajo del stock mínimo.{" "}
+                <Button variant="link" className="p-0 h-auto text-red-600" onClick={() => setFiltroStockMinimo(true)}>
+                  Ver productos
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {contadores.proximosVencer > 0 && !filtroProximoVencer && (
+            <Alert className="bg-orange-50 dark:bg-orange-950/20 border-orange-200">
+              <AlertTriangle className="h-4 w-4 text-orange-600" />
+              <AlertDescription>
+                Hay {contadores.proximosVencer} productos próximos a vencer en los siguientes 30 días.{" "}
+                <Button
+                  variant="link"
+                  className="p-0 h-auto text-orange-600"
+                  onClick={() => setFiltroProximoVencer(true)}
+                >
+                  Ver productos
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Tabla de productos */}
+          <div className="rounded-md border overflow-auto max-h-[600px]" ref={tablaRef}>
+            <Table>
+              <TableHeader className="sticky top-0 bg-white dark:bg-gray-950 z-10">
+                <TableRow>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Área</TableHead>
+                  <TableHead>Categoría</TableHead>
+                  <TableHead>Cantidad</TableHead>
+                  <TableHead>Stock Mínimo</TableHead>
+                  <TableHead>Stock Máximo</TableHead>
+                  <TableHead>Fecha Caducidad</TableHead>
+                  <TableHead>Fecha Recepción</TableHead>
+                  <TableHead>Proveedor</TableHead>
+                  <TableHead>Precio</TableHead>
+                  <TableHead>Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {productosFiltrados.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center py-4">
+                      No se encontraron productos con los filtros seleccionados.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  productosFiltrados.map((producto) => {
+                    // Determinar si el producto está por debajo del stock mínimo
+                    const bajoStock = producto.cantidad <= producto.stockMinimo
+
+                    // Determinar si el producto está próximo a vencer
+                    const hoy = new Date()
+                    const fechaVencimiento = producto.fechaCaducidad ? new Date(producto.fechaCaducidad) : null
+                    const diasParaVencer = fechaVencimiento
+                      ? Math.ceil((fechaVencimiento.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
+                      : 999
+                    const proximoAVencer = diasParaVencer <= 30 && diasParaVencer > 0
+
+                    // Verificar si el producto requiere refrigeración
+                    const requiereRefrigeracion =
+                      producto.refrigeracion || requiereRefrigeracionProducto(producto.nombre)
+
+                    return (
+                      <ProductoRow
+                        key={producto.id}
+                        producto={producto}
+                        bajoStock={bajoStock}
+                        proximoAVencer={proximoAVencer}
+                        diasParaVencer={diasParaVencer}
+                        requiereRefrigeracion={requiereRefrigeracion}
+                        toggleGuardarProducto={toggleGuardarProducto}
+                        decrementarCantidad={decrementarCantidad}
+                        incrementarCantidad={incrementarCantidad}
+                        handleEditar={handleEditar}
+                        handleEliminar={handleEliminar}
+                      />
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Diálogo para editar producto */}
+          <Dialog open={mostrarDialogoEditar} onOpenChange={setMostrarDialogoEditar}>
+            <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Editar producto</DialogTitle>
+              </DialogHeader>
+
+              {productoEditando && (
+                <div className="grid grid-cols-2 gap-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-nombre">Nombre</Label>
+                    <Input
+                      id="edit-nombre"
+                      value={productoEditando.nombre}
+                      onChange={(e) => setProductoEditando({ ...productoEditando, nombre: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-cantidad">Cantidad</Label>
+                    <Input
+                      id="edit-cantidad"
+                      type="number"
+                      value={productoEditando.cantidad}
+                      onChange={(e) => setProductoEditando({ ...productoEditando, cantidad: Number(e.target.value) })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-area">Área</Label>
+                    <Select
+                      value={productoEditando.area}
+                      onValueChange={(value) => setProductoEditando({ ...productoEditando, area: value })}
+                    >
+                      <SelectTrigger id="edit-area">
+                        <SelectValue placeholder="Seleccionar área" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        {areas.map((area) => (
+                          <SelectItem key={area} value={area}>
+                            {area}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-categoria">Categoría</Label>
+                    <Select
+                      value={productoEditando.categoria}
+                      onValueChange={(value) => setProductoEditando({ ...productoEditando, categoria: value })}
+                    >
+                      <SelectTrigger id="edit-categoria">
+                        <SelectValue placeholder="Seleccionar categoría" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        {categorias.map((categoria) => (
+                          <SelectItem key={categoria} value={categoria}>
+                            {categoria}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-stockMinimo">Stock Mínimo</Label>
+                    <Input
+                      id="edit-stockMinimo"
+                      type="number"
+                      value={productoEditando.stockMinimo}
+                      onChange={(e) =>
+                        setProductoEditando({ ...productoEditando, stockMinimo: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-precio">Precio</Label>
+                    <Input
+                      id="edit-precio"
+                      type="number"
+                      step="0.01"
+                      value={productoEditando.precio}
+                      onChange={(e) => setProductoEditando({ ...productoEditando, precio: Number(e.target.value) })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-proveedor">Proveedor</Label>
+                    <Input
+                      id="edit-proveedor"
+                      value={productoEditando.proveedor || ""}
+                      onChange={(e) => setProductoEditando({ ...productoEditando, proveedor: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-fechaCaducidad">Fecha de Caducidad</Label>
+                    <Input
+                      id="edit-fechaCaducidad"
+                      type="date"
+                      value={productoEditando.fechaCaducidad || ""}
+                      onChange={(e) => setProductoEditando({ ...productoEditando, fechaCaducidad: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-fechaRecepcion">Fecha de Recepción</Label>
+                    <Input
+                      id="edit-fechaRecepcion"
+                      type="date"
+                      value={productoEditando.fechaRecepcion || ""}
+                      onChange={(e) => setProductoEditando({ ...productoEditando, fechaRecepcion: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-stockMaximo">Stock Máximo</Label>
+                    <Input
+                      id="edit-stockMaximo"
+                      type="number"
+                      value={productoEditando.stockMaximo || ""}
+                      onChange={(e) =>
+                        setProductoEditando({ ...productoEditando, stockMaximo: Number(e.target.value) })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-refrigeracion">Refrigeración</Label>
+                    <Select
+                      value={productoEditando.refrigeracion ? "true" : "false"}
+                      onValueChange={(value) =>
+                        setProductoEditando({ ...productoEditando, refrigeracion: value === "true" })
+                      }
+                    >
+                      <SelectTrigger id="edit-refrigeracion">
+                        <SelectValue placeholder="¿Requiere refrigeración?" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="true">Sí</SelectItem>
+                        <SelectItem value="false">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="edit-observaciones">Observaciones</Label>
+                    <Textarea
+                      id="edit-observaciones"
+                      value={productoEditando.observaciones || ""}
+                      onChange={(e) => setProductoEditando({ ...productoEditando, observaciones: e.target.value })}
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="edit-descripcion">Descripción</Label>
+                    <Textarea
+                      id="edit-descripcion"
+                      value={productoEditando.descripcion || ""}
+                      onChange={(e) => setProductoEditando({ ...productoEditando, descripcion: e.target.value })}
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setMostrarDialogoEditar(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={actualizarProducto}>Guardar cambios</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Diálogo para confirmar eliminación */}
+          <Dialog open={mostrarDialogoEliminar} onOpenChange={setMostrarDialogoEliminar}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>Confirmar eliminación</DialogTitle>
+              </DialogHeader>
+              <div className="py-4">
+                <p>¿Estás seguro de que deseas eliminar el producto "{productoSeleccionado?.nombre}"?</p>
+                <p className="text-sm text-gray-500 mt-2">Esta acción no se puede deshacer.</p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setMostrarDialogoEliminar(false)}>
+                  Cancelar
+                </Button>
+                <Button variant="destructive" onClick={eliminarProducto}>
+                  Eliminar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Diálogo para registrar compra */}
+          <Dialog open={mostrarDialogoCompra} onOpenChange={setMostrarDialogoCompra}>
+            <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Registrar Nueva Compra</DialogTitle>
+              </DialogHeader>
+
+              <div className="grid grid-cols-2 gap-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="productoId">Producto *</Label>
+                  <Select
+                    value={compraForm.productoId}
+                    onValueChange={(value) => handleCompraSelectChange("productoId", value)}
+                  >
+                    <SelectTrigger id="productoId">
+                      <SelectValue placeholder="Seleccionar producto" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60 overflow-y-auto">
+                      {productos.map((producto) => (
+                        <SelectItem key={producto.id} value={producto.id}>
+                          {producto.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="cantidad">Cantidad *</Label>
+                  <Input
+                    id="cantidad"
+                    name="cantidad"
+                    type="number"
+                    min="1"
+                    value={compraForm.cantidad}
+                    onChange={handleCompraChange}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="precioUnitario">Precio Unitario *</Label>
+                  <Input
+                    id="precioUnitario"
+                    name="precioUnitario"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={compraForm.precioUnitario}
+                    onChange={handleCompraChange}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="fecha">Fecha de Compra</Label>
+                  <Input id="fecha" name="fecha" type="date" value={compraForm.fecha} onChange={handleCompraChange} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="proveedor">Proveedor</Label>
+                  <Input
+                    id="proveedor"
+                    name="proveedor"
+                    value={compraForm.proveedor}
+                    onChange={handleCompraChange}
+                    list="proveedores-list"
+                  />
+                  <datalist id="proveedores-list">
+                    <option value="Dental Chile" />
+                    <option value="Medical Supplies Inc." />
+                    <option value="Pharma Plus" />
+                    <option value="Dental Solutions" />
+                    <option value="Ortho Specialists" />
+                    <option value="Implant Tech" />
+                    <option value="Dental Depot" />
+                    <option value="Odonto Supply" />
+                    <option value="Clínica Dental Proveedores" />
+                    <option value="Dental Express" />
+                  </datalist>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="area">Área *</Label>
+                  <Select value={compraForm.area} onValueChange={(value) => handleCompraSelectChange("area", value)}>
+                    <SelectTrigger id="area">
+                      <SelectValue placeholder="Seleccionar área" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60 overflow-y-auto">
+                      {areas.map((area) => (
+                        <SelectItem key={area} value={area}>
+                          {area}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {compraForm.productoId && compraForm.cantidad > 0 && compraForm.precioUnitario > 0 && (
+                  <div className="col-span-2 p-4 bg-gray-50 rounded-md">
+                    <p className="font-medium">Resumen de compra:</p>
+                    <p>Total: {formatearPrecioCLP(compraForm.cantidad * compraForm.precioUnitario)}</p>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setMostrarDialogoCompra(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={registrarCompra}>Registrar Compra</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
+
+        <TabsContent value="pedidos" className="pt-4">
+          <div className="border rounded-lg p-8 text-center text-gray-500">
+            <h3 className="text-lg font-medium mb-2">Módulo de Pedidos</h3>
+            <p>Esta funcionalidad estará disponible próximamente.</p>
+            <Button className="mt-4" onClick={() => (window.location.href = "/inventario/pedidos")}>
+              Ir a Pedidos
+            </Button>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="devoluciones" className="pt-4">
+          <div className="border rounded-lg p-8 text-center text-gray-500">
+            <h3 className="text-lg font-medium mb-2">Módulo de Devoluciones</h3>
+            <p>Esta funcionalidad estará disponible próximamente.</p>
+            <Button className="mt-4" onClick={() => (window.location.href = "/inventario/devoluciones")}>
+              Ir a Devoluciones
+            </Button>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="cierre-diario" className="pt-4">
+          <div className="border rounded-lg p-8 text-center text-gray-500">
+            <h3 className="text-lg font-medium mb-2">Módulo de Cierre Diario</h3>
+            <p>Esta funcionalidad estará disponible próximamente.</p>
+            <Button className="mt-4" onClick={() => (window.location.href = "/inventario/cierre-diario")}>
+              Ir a Cierre Diario
+            </Button>
+          </div>
         </TabsContent>
       </Tabs>
+
+      {/* Botón flotante para volver arriba */}
+      {mostrarBotonSubir && (
+        <Button className="fixed bottom-6 right-6 rounded-full w-12 h-12 shadow-lg" onClick={scrollToTop}>
+          <ArrowUp className="h-6 w-6" />
+        </Button>
+      )}
     </div>
   )
 }
