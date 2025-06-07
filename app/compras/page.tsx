@@ -16,6 +16,7 @@ import { Trash2, Calendar, FileDown, Filter } from "lucide-react"
 import Link from "next/link"
 import { jsPDF } from "jspdf"
 import "jspdf-autotable"
+import { areas } from "../inventario/page"
 
 interface ProductoInventario {
   id: string
@@ -156,6 +157,11 @@ export default function Compras() {
     localStorage.setItem("systemLogs", JSON.stringify(logs))
   }
 
+  // Modificar la función de cálculo de totales
+  const calcularTotal = (cantidad: number, precioUnitario: number) => {
+    return cantidad * precioUnitario
+  }
+
   const calcularGastos = () => {
     // Filtrar compras por área si es necesario
     const comprasFiltradas = filtroArea
@@ -260,7 +266,7 @@ export default function Compras() {
       return
     }
 
-    const precioTotal = formData.cantidad * formData.precioUnitario
+    const precioTotal = calcularTotal(formData.cantidad, formData.precioUnitario)
 
     // Obtener el nombre del proveedor
     let nombreProveedor = ""
@@ -573,22 +579,11 @@ export default function Compras() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todas las áreas</SelectItem>
-                        <SelectItem value="Box 1">Box 1</SelectItem>
-                        <SelectItem value="Box 2">Box 2</SelectItem>
-                        <SelectItem value="Box 3">Box 3</SelectItem>
-                        <SelectItem value="Box 4">Box 4</SelectItem>
-                        <SelectItem value="Box 5">Box 5</SelectItem>
-                        <SelectItem value="Recepción">Recepción</SelectItem>
-                        <SelectItem value="Almacenamiento">Almacenamiento</SelectItem>
-                        <SelectItem value="Cirugía Maxilofacial">Cirugía Maxilofacial</SelectItem>
-                        <SelectItem value="Implantología">Implantología</SelectItem>
-                        <SelectItem value="Rehabilitación">Rehabilitación</SelectItem>
-                        <SelectItem value="Endodoncia">Endodoncia</SelectItem>
-                        <SelectItem value="Periodoncia">Periodoncia</SelectItem>
-                        <SelectItem value="Ortodoncia">Ortodoncia</SelectItem>
-                        <SelectItem value="Odontopediatría">Odontopediatría</SelectItem>
-                        <SelectItem value="Radiología">Radiología</SelectItem>
-                        <SelectItem value="Esterilización">Esterilización</SelectItem>
+                        {areas.map((area) => (
+                          <SelectItem key={area} value={area}>
+                            {area}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -707,24 +702,11 @@ export default function Compras() {
                       <SelectContent>
                         {isAdmin || userArea === "Recepción" || userArea === "Todas" ? (
                           // Admin o recepción puede seleccionar cualquier área
-                          <>
-                            <SelectItem value="Box 1">Box 1</SelectItem>
-                            <SelectItem value="Box 2">Box 2</SelectItem>
-                            <SelectItem value="Box 3">Box 3</SelectItem>
-                            <SelectItem value="Box 4">Box 4</SelectItem>
-                            <SelectItem value="Box 5">Box 5</SelectItem>
-                            <SelectItem value="Recepción">Recepción</SelectItem>
-                            <SelectItem value="Almacenamiento">Almacenamiento</SelectItem>
-                            <SelectItem value="Cirugía Maxilofacial">Cirugía Maxilofacial</SelectItem>
-                            <SelectItem value="Implantología">Implantología</SelectItem>
-                            <SelectItem value="Rehabilitación">Rehabilitación</SelectItem>
-                            <SelectItem value="Endodoncia">Endodoncia</SelectItem>
-                            <SelectItem value="Periodoncia">Periodoncia</SelectItem>
-                            <SelectItem value="Ortodoncia">Ortodoncia</SelectItem>
-                            <SelectItem value="Odontopediatría">Odontopediatría</SelectItem>
-                            <SelectItem value="Radiología">Radiología</SelectItem>
-                            <SelectItem value="Esterilización">Esterilización</SelectItem>
-                          </>
+                          areas.map((area) => (
+                            <SelectItem key={area} value={area}>
+                              {area}
+                            </SelectItem>
+                          ))
                         ) : (
                           // Usuario normal solo puede seleccionar su área
                           <SelectItem value={userArea}>{userArea}</SelectItem>
@@ -753,7 +735,7 @@ export default function Compras() {
 
           <Card>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-h-[600px]">
                 <Table>
                   <TableHeader>
                     <TableRow>
